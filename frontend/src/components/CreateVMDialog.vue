@@ -10,19 +10,18 @@
         </v-card-title>
         <v-card-text>
           <v-form ref="form">
+             <v-text-field label="Host Id" disabled :value="host"></v-text-field>
             <v-text-field
-              label="Hostname"
-              v-model="hostname"
-              :rules="rules.hostname"
+              label="VM Name"
+              v-model="vmName"
+              :rules="rules.vmName"
             ></v-text-field>
             <v-text-field
-              label="IP address"
-              v-model="ipAddress"
-              :prefix="ipAddressPrefix"
-              :rules="rules.ipAddress"
+              label="CPU"
+              v-model="cpu"
+              :rules="rules.cpu"
               placeholder="123"
             ></v-text-field>
-            <v-text-field label="Name" disabled :value="name"></v-text-field>
             <v-text-field
               label="RAM"
               v-model="ram"
@@ -34,6 +33,11 @@
               v-model="diskSpace"
               suffix="GB"
               :rules="rules.diskSpace"
+            ></v-text-field>
+            <v-text-field
+              label="Image path"
+              v-model="image"
+              :rules="rules.image"
             ></v-text-field>
           </v-form>
         </v-card-text>
@@ -59,18 +63,28 @@
   </div>
 </template>
 
+		<!-- Id       string `json:"id"`
+		VmName   string `json:"vm_name"`
+		Cpu      int32  `json:"cpu"`
+		Memory   int32  `json:"memory"`
+		DiskSize int32  `json:"disk_size"`
+		Image    string `json:"image"` -->
+
 <script lang="ts">
 import { Component, Prop, Vue } from "vue-property-decorator";
+import { authFetch } from "@/utils/fetch";
 
 @Component
 export default class CreateVMDialog extends Vue {
+   @Prop(String) readonly host!: string;
   // form values
-  ipAddress = "";
-  hostname = "";
+  cpu = "";
+  vmName = "";
   ram = "";
   diskSpace = "";
+  image = "";
 
-  readonly ipAddressPrefix = "192.168.0.";
+  // readonly cpuPrefix = "192.168.0.";
 
   // form validation
 
@@ -79,23 +93,24 @@ export default class CreateVMDialog extends Vue {
   }
 
   readonly rules = {
-    hostname: [(v: string) => v.length != 0 || "Hostname is required"],
-    ipAddress: [
-      (v: string) => v.length != 0 || "IP address is required",
-      (v: string) => this.isInteger(v) || "IP address is not a number",
+    vmName: [(v: string) => v.length != 0 || "vmName is required"],
+    cpu: [
+      (v: string) => v.length != 0 || "cpu is required",
+      (v: string) => this.isInteger(v) || "cpu is not a number",
       (v: string) =>
-        (parseInt(v) < 255 && parseInt(v) > 0) || "Invalid IP address"
+        (parseInt(v) < 128 && parseInt(v) > 0) || "Invalid cpu"
     ],
     ram: [
       (v: string) => v.length != 0 || "RAM is required",
       (v: string) => this.isInteger(v) || "IP address is not a positive number",
-      (v: string) => parseInt(v) >= 128 || "RAM must be at least 128 MB"
+      (v: string) => parseInt(v) >= 1024 || "RAM must be at least 1024 MB"
     ],
     diskSpace: [
       (v: string) => v.length != 0 || "Disk space is required",
       (v: string) => this.isInteger(v) || "Disk space is not a positive number",
       (v: string) => parseInt(v) >= 5 || "Disk space must be at least 5 GB"
-    ]
+    ],
+    image: [(v: string) => v.length != 0 || "image is required"]
   };
 
   // ui state
@@ -113,43 +128,53 @@ export default class CreateVMDialog extends Vue {
   }
 
   async create() {
-    if (!(this.$refs.form as any).validate()) {
-      return;
-    }
+    // console.log(`payload ${payload}`)
+    // this.$emit("created", payload);
+    // this.open = false
+
+    // 		Id       string `json:"id"`
+		// VmName   string `json:"vm_name"`
+		// Cpu      int32  `json:"cpu"`
+		// Memory   int32  `json:"memory"`
+		// DiskSize int32  `json:"disk_size"`
+		// Image    string `json:"image"`
     this.loading = true;
-    const response = await fetch("/api/vms", {
+    const response = await authFetch("/api/vm/create", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        disk_space_gb: parseInt(this.diskSpace),
-        ram_mb: parseInt(this.ram),
-        name: this.name,
-        hostname: this.hostname,
-        ip_address: `${this.ipAddressPrefix}${this.ipAddress}`
+        id: this.host,
+        vm_name: this.vmName,
+        cpu: parseInt(this.cpu),
+        memory: parseInt(this.ram),
+        disk_size: parseInt(this.diskSpace),
+        image: this.image
       })
     });
     this.loading = false;
 
-    const responseJSON: any = await response.json();
-
-    if (responseJSON.status == "ok") {
-      this.statusOK = true;
-      this.open = false;
-      this.$emit("created");
-    } else {
-      this.error = responseJSON.error;
-      this.statusError = true;
+    if (response === undefined) {
+      return
     }
+
+    if (!response.ok) {
+      const data = await response.text(); //
+      alert(`create vm failed, status code:${response.status}, message:${data}`);
+      return;
+    }
+    var resp = await response.json();
+    console.log("resp:", resp);
+    this.$emit("created");
   }
 
-  get name() {
-    if (this.ipAddress && this.hostname) {
-      return `${this.ipAddress}_${this.hostname}`;
-    } else {
-      return "";
-    }
-  }
+  // get name() {
+  //   if (this.cpu && this.vmName) {
+  //     return `${this.cpu}_${this.vmName}`;
+  //   } else {
+  //     return "";
+  //   }
+  // }
 }
 </script>
